@@ -5,66 +5,108 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 import io
+from datetime import datetime
 
-# Configuración de página
-st.set_page_config(page_title="Asistente de Trámites UNAL")
+st.set_page_config(page_title="Asistente Normativo UNAL", layout="centered")
 
-# Título con color institucional
-st.markdown("<h1 style='color:#C8102E;'>Asistente de Trámites UNAL</h1>", unsafe_allow_html=True)
+# Color institucional
+st.markdown("<h1 style='color:#C8102E;'>Asistente Normativo UNAL</h1>", unsafe_allow_html=True)
+st.markdown("Herramienta de orientación basada en normativa institucional vigente.")
+st.markdown("---")
 
-st.write("Genera cartas formales siguiendo lineamientos institucionales.")
-
-# Campo para API Key
+# API KEY
 api_key = st.text_input("Ingresa tu API Key de Gemini", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
 
-    st.subheader("Datos del estudiante")
+    # Inicializar estado
+    if "analisis_generado" not in st.session_state:
+        st.session_state.analisis_generado = False
+    if "respuesta_normativa" not in st.session_state:
+        st.session_state.respuesta_normativa = ""
+    if "carta_generada" not in st.session_state:
+        st.session_state.carta_generada = ""
 
-    nombre = st.text_input("Nombre completo")
-    documento = st.text_input("Número de documento")
-    programa = st.text_input("Programa académico")
-    facultad = st.text_input("Facultad")
-    sede = st.text_input("Sede")
-    motivo = st.text_area("Describe el motivo del trámite")
+    st.subheader("Describe tu caso")
 
-    if st.button("Generar carta formal"):
+    caso_usuario = st.text_area("Explica detalladamente la situación académica o administrativa")
+
+    if st.button("Analizar conforme a normativa UNAL"):
 
         prompt = f"""
-        Redacta una carta formal dirigida a la Universidad Nacional de Colombia.
-        Usa tono institucional.
-        No inventes información.
-        No agregues datos que no fueron proporcionados.
+        Actúa como asistente normativo de la Universidad Nacional de Colombia.
 
-        Nombre: {nombre}
-        Documento: {documento}
-        Programa: {programa}
-        Facultad: {facultad}
-        Sede: {sede}
-        Motivo: {motivo}
+        Responde únicamente con base en normativa institucional vigente.
+        No inventes artículos específicos si no estás seguro.
+        No agregues normas inexistentes.
+        Si falta información, indícalo claramente.
+
+        Analiza el siguiente caso:
+        {caso_usuario}
+
+        1. Determina si el trámite podría ser procedente.
+        2. Explica bajo qué tipo de disposición normativa se enmarca.
+        3. Indica condiciones y posibles plazos.
+        4. No redactes carta aún.
         """
 
         respuesta = model.generate_content(prompt)
-        carta = respuesta.text
+        st.session_state.respuesta_normativa = respuesta.text
+        st.session_state.analisis_generado = True
 
-        st.subheader("Vista previa")
-        st.write(carta)
+    if st.session_state.analisis_generado:
+        st.subheader("Análisis normativo")
+        st.write(st.session_state.respuesta_normativa)
 
-        # Crear PDF
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        elementos = []
-        elementos.append(Paragraph(carta.replace("\n", "<br/>"), styles["Normal"]))
-        elementos.append(Spacer(1, 0.5 * inch))
-        doc.build(elementos)
-        buffer.seek(0)
+        st.markdown("---")
+        st.subheader("¿Deseas generar solicitud formal?")
 
-        st.download_button(
-            label="Descargar PDF",
-            data=buffer,
-            file_name="Carta_UNAL.pdf",
-            mime="application/pdf"
-        )
+        nombre = st.text_input("Nombre completo")
+        documento = st.text_input("Número de documento")
+        programa = st.text_input("Programa académico")
+        facultad = st.text_input("Facultad")
+        sede = st.text_input("Sede")
+
+        if st.button("Generar solicitud formal en PDF"):
+
+            prompt_carta = f"""
+            Redacta una solicitud formal dirigida a la Universidad Nacional de Colombia.
+
+            Usa tono institucional.
+            No inventes información.
+            Basarse en el siguiente análisis normativo:
+            {st.session_state.respuesta_normativa}
+
+            Datos del estudiante:
+            Nombre: {nombre}
+            Documento: {documento}
+            Programa: {programa}
+            Facultad: {facultad}
+            Sede: {sede}
+            """
+
+            respuesta_carta = model.generate_content(prompt_carta)
+            carta = respuesta_carta.text
+            st.session_state.carta_generada = carta
+
+            st.subheader("Vista previa de la solicitud")
+            st.write(carta)
+
+            # Generar PDF
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            styles = getSampleStyleSheet()
+            elementos = []
+            elementos.append(Paragraph(carta.replace("\n", "<br/>"), styles["Normal"]))
+            elementos.append(Spacer(1, 0.5 * inch))
+            doc.build(elementos)
+            buffer.seek(0)
+
+            st.download_button(
+                label="Descargar PDF",
+                data=buffer,
+                file_name="Solicitud_UNAL.pdf",
+                mime="application/pdf"
+            )
